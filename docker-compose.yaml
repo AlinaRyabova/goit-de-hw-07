@@ -1,0 +1,61 @@
+services:
+  db:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    ports:
+      - "5433:5432"
+
+  redis:
+    image: redis:latest
+    ports:
+      - "6379:6379"
+
+  airflow-webserver:
+    image: apache/airflow:2.7.0
+    ports:
+      - "8081:8080"
+    depends_on:
+      - db
+      - redis
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=CeleryExecutor
+      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@db:5432/airflow
+    volumes:
+      - ./dags:/opt/airflow/dags
+    command: ["airflow", "webserver"]
+
+  airflow-scheduler:
+    image: apache/airflow:2.7.0
+    depends_on:
+      - db
+      - redis
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=CeleryExecutor
+      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@db:5432/airflow
+    volumes:
+      - ./dags:/opt/airflow/dags
+    command: ["airflow", "scheduler"]
+
+  airflow-worker:
+    image: apache/airflow:2.7.0
+    depends_on:
+      - redis
+      - db
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=CeleryExecutor
+      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@db:5432/airflow
+    volumes:
+      - ./dags:/opt/airflow/dags
+    command: ["airflow", "worker"]
+
+  airflow-init:
+    image: apache/airflow:2.7.0
+    entrypoint: airflow db init
+    depends_on:
+      - db
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=CeleryExecutor
+      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@db:5432/airflow
