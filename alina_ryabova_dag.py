@@ -4,9 +4,9 @@ from airflow.operators.python import PythonOperator, BranchPythonOperator
 from airflow.utils.trigger_rule import TriggerRule
 from airflow.providers.common.sql.sensors.sql import SqlSensor
 from airflow.utils.state import State
-from airflow.utils.dates import days_ago
 import random
 import time
+from airflow.utils.dates import days_ago
 
 
 # Функція для примусового встановлення статусу на SUCCESS
@@ -16,26 +16,13 @@ def force_success_status(ti, **kwargs):
 
 
 # Функція для випадкового вибору медалі
-def random_medal_choice(ti, **kwargs):
-    medal = random.choice(["Gold", "Silver", "Bronze"])
-    ti.xcom_push(key="selected_medal", value=medal)  # Зберігаємо вибір у XCom
-    return medal
+def random_medal_choice():
+    return random.choice(["Gold", "Silver", "Bronze"])
 
 
-# Функція для затримки виконання
+# Функція затримки виконання
 def delay_execution():
     time.sleep(20)
-
-
-# Функція розгалуження
-def branching_logic(ti, **kwargs):
-    selected_medal = ti.xcom_pull(task_ids="select_medal", key="selected_medal")
-    if selected_medal == "Gold":
-        return "count_gold_medals"
-    elif selected_medal == "Silver":
-        return "count_silver_medals"
-    else:
-        return "count_bronze_medals"
 
 
 # Базові налаштування для DAG
@@ -53,7 +40,7 @@ with DAG(
     default_args=default_args,
     schedule_interval=None,  # DAG не має регулярного розкладу
     catchup=False,  # Вимкнути пропущені виконання
-    tags=["alina_medal_counting"],
+    tags=["alina__medal_counting"],
 ) as dag:
 
     # Завдання 1: Створення таблиці для збереження результатів
@@ -77,6 +64,15 @@ with DAG(
     )
 
     # Завдання 3: Розгалуження для підрахунку медалей
+    def branching_logic(**kwargs):
+        selected_medal = kwargs["ti"]. xcom_pull(task_ids="select_medal")
+        if selected_medal == "Gold":
+            return "count_gold_medals"
+        elif selected_medal == "Silver":
+            return "count_silver_medals"
+        else:
+            return "count_bronze_medals"
+
     branching_task = BranchPythonOperator(
         task_id="branch_based_on_medal",
         python_callable=branching_logic,
@@ -88,7 +84,7 @@ with DAG(
         task_id="count_bronze_medals",
         mysql_conn_id=mysql_connection_id,
         sql="""
-           INSERT INTO neo_data.alina_ryabova_medal_counts (medal_type, medal_count)
+           INSERT INTO neo_data. alina_ryabova_medal_counts (medal_type, medal_count)
            SELECT 'Bronze', COUNT(*)
            FROM olympic_dataset.athlete_event_results
            WHERE medal = 'Bronze';
@@ -100,7 +96,7 @@ with DAG(
         task_id="count_silver_medals",
         mysql_conn_id=mysql_connection_id,
         sql="""
-           INSERT INTO neo_data.alina_ryabova_medal_counts (medal_type, medal_count)
+           INSERT INTO neo_data. alina_ryabova_medal_counts (medal_type, medal_count)
            SELECT 'Silver', COUNT(*)
            FROM olympic_dataset.athlete_event_results
            WHERE medal = 'Silver';
@@ -132,15 +128,14 @@ with DAG(
         conn_id=mysql_connection_id,
         sql="""
                     WITH count_in_medals AS (
-                        SELECT COUNT(*) as nrows 
-                        FROM neo_data.alina_ryabova_medal_counts
+                        select COUNT(*) as nrows FROM neo_data.alina_ryabova_medal_counts
                         WHERE created_at >= NOW() - INTERVAL 30 SECOND
-                    )
-                    SELECT nrows > 0 FROM count_in_medals; 
+                        )
+                    SELECT nrows > 0 from count_in_medals; 
                 """,
         mode="poke",  # Периодична перевірка умови
-        poke_interval=10,  # Перевірка кожні 10 секунд
-        timeout=30,  # Тайм-аут через 30 секунд
+        poke_interval=10,  # Перевірка кожні 5 секунд
+        timeout=30,  # Тайм-аут після 6 секунд
     )
 
     # Визначення залежностей
